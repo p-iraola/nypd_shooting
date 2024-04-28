@@ -1,0 +1,97 @@
+---
+title: "NYPD_Iraola"
+author: "P. Iraola"
+date: "2024-04-15"
+output: pdf_document
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+```
+
+# NYPD Historical Shooting Report
+
+## Data gathering
+These data were pulled from the data.gov catalog. I searched for 'NYPD Shooting Incident Data' and copied the link to the CSV file, which I use in my code below.
+
+## Reading in the data.
+First we read in the data, along with the required packages, and then display the data so that we know what it contains.
+```{r import, echo=TRUE}
+library(tidyverse)
+library(stats)
+library(nnet)
+url = "https://data.cityofnewyork.us/api/views/833y-fsy8/rows.csv?accessType=DOWNLOAD"
+shooting_data <- read_csv(url)
+shooting_data
+```
+
+## Cleaning the data 
+I am interested in comparing perp's age with victim's age, so I clean the data accordingly. I make sure to exclude any missing values, "UKNOWN" values, or "(null)" values.
+
+```{r cleaning, echo=TRUE}
+shooting_data <- shooting_data %>%
+  select(PERP_AGE_GROUP, VIC_AGE_GROUP) %>%
+  filter(!is.na(PERP_AGE_GROUP) & PERP_AGE_GROUP != "UNKNOWN" & PERP_AGE_GROUP != "(null)",
+         !is.na(VIC_AGE_GROUP) & VIC_AGE_GROUP != "UNKNOWN" & VIC_AGE_GROUP != "(null)")
+
+shooting_data
+```
+
+## Cleaning Part Two
+There was still some issues with the data, such as incorrect ages of both victims and perps (most likely typos by whoever was entering the data), so I cleaned it further by filtering for only the following age groups, <18, 18-24, 25-44, 45-64, and 65+.
+
+```{r cleaning2, echo=TRUE}
+desired_age_categories <- c("<18", "18-24", "25-44", "45-64", "65+")
+
+shooting_data <- shooting_data %>%
+  filter(PERP_AGE_GROUP %in% desired_age_categories &
+           VIC_AGE_GROUP %in% desired_age_categories)
+
+shooting_data
+```
+
+## Visualizing
+Now I want to visualize my data. I decided to use a bar plot to do so.
+```{r visualization1, echo=TRUE}
+ggplot(shooting_data, aes(x = PERP_AGE_GROUP, fill = VIC_AGE_GROUP)) +
+  geom_bar(position = "dodge") +
+  labs(x = "Perpetrator Age Group", y = "Count", fill = "Victim Age Group") 
+```
+
+## Visualizing Part Two
+After looking at my bar plot, I decided I was interested in the two age groups 18-24 and 25-44 as they seem to be where most shootings take place. I created another bar plot that only contains those two categories.
+```{r visualization2, echo=TRUE}
+filtered_data <- shooting_data %>%
+  filter(PERP_AGE_GROUP %in% c("18-24", "25-44"))
+
+# Plot the filtered data
+ggplot(filtered_data, aes(x = PERP_AGE_GROUP, fill = VIC_AGE_GROUP)) +
+  geom_bar(position = "dodge") +
+  labs(x = "Perpetrator Age Group", y = "Count", fill = "Victim Age Group")
+```
+
+## Chi Sq Test
+I want to see if there is a significant association between the age group of perps and the age group of victims, so I ran a chi sq test of independence.
+```{r chisq, echo=TRUE}
+chi_sq_test <- chisq.test(table(shooting_data$PERP_AGE_GROUP, shooting_data$VIC_AGE_GROUP))
+
+chi_sq_test
+```
+
+## Logistic Regression Model
+Now I want to run a logistic regression model on the perp age groups 18-24 and 25-44 to see how well we can predict the victim's age based on the perp's age.
+```{r logmodel, echo=TRUE}
+# Fit logistic regression model for perpetrators aged 18-24
+logit_model_18_24 <- multinom(VIC_AGE_GROUP ~ 1, data = subset(shooting_data, PERP_AGE_GROUP == "18-24"))
+
+# Fit logistic regression model for perpetrators aged 25-44
+logit_model_25_44 <- multinom(VIC_AGE_GROUP ~ 1, data = subset(shooting_data, PERP_AGE_GROUP == "25-44"))
+
+logit_model_18_24
+logit_model_25_44
+```
+
+## Conclusion & Bias
+In this analysis I examined the relationship between the age groups of perpetrators and victims involved in shootings in New York. I cleaned the data to focus on certain age groups, visualized the data using bar plots, conducted a chi-square test of independence, and employed logistic regression models to predict victim age based on perp age.
+
+One possible sources of bias is selection bias; this analysis relies on data provided from the NYPD, which may not include all shooting incidents. Unreported shootings could lead to incomplete data and inaccurate conclusions.
